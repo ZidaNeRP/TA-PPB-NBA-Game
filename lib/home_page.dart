@@ -12,18 +12,59 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   List<Game> games = [];
+  int selectedYear = DateTime.now().year;
+  bool isDataLoaded = false; // Flag to check if data has been loaded
 
-  // get games
-  Future<void> getGames() async {
-    var response = await http.get(Uri.https('www.balldontlie.io', 'api/v1/games'));
-    var jsonData = jsonDecode(response.body);
+  @override
+  void initState() {
+    super.initState();
+    getGames(selectedYear);
+  }
 
-    for (var gameData in jsonData['data']) {
-      final game = Game.fromJson(gameData);
-      games.add(game);
+  Future<void> getGames(int year) async {
+    if (!isDataLoaded) {
+      final String startDate = '$year-01-01';
+      final String endDate = '$year-12-31';
+
+      try {
+        var response = await http.get(
+          Uri.https('www.balldontlie.io', 'api/v1/games', {
+            'start_date': startDate,
+            'end_date': endDate,
+            'seasons[]': year.toString(),
+            'team_ids[]': '1', // Change this to the desired team ID
+          }),
+        );
+
+        if (response.statusCode == 200) {
+          var jsonData = jsonDecode(response.body);
+
+          setState(() {
+            games.clear();
+            for (var gameData in jsonData['data']) {
+              final game = Game.fromJson(gameData);
+              games.add(game);
+            }
+            isDataLoaded = true; // Set the flag to true after data is loaded
+          });
+
+          print(games.length);
+        } else {
+          print('Failed to load games. Status code: ${response.statusCode}');
+        }
+      } catch (error) {
+        print('Error during games request: $error');
+      }
     }
+  }
 
-    print(games.length);
+  // Function to change the selected year and reload data
+  void changeYear(int year) {
+    setState(() {
+      selectedYear = year;
+      isDataLoaded = false; // Reset the flag when changing the year
+    });
+    getGames(selectedYear);
   }
 
   @override
@@ -31,10 +72,32 @@ class _HomePageState extends State<HomePage> {
     return SafeArea(
       child: Scaffold(
         appBar: AppBar(
-          title: Text('NBA Games'), // Set your app bar title
+          title: Row(
+            children: [
+              Text('NBA Games'),
+              SizedBox(width: 16),
+              Spacer(),
+              // DropdownButton for selecting year
+              DropdownButton<int>(
+                value: selectedYear,
+                items: List.generate(
+                  DateTime.now().year - 1990 + 1,
+                  (index) => DropdownMenuItem<int>(
+                    value: 1990 + index,
+                    child: Text((1990 + index).toString()),
+                  ),
+                ),
+                onChanged: (int? year) {
+                  if (year != null) {
+                    changeYear(year);
+                  }
+                },
+              ),
+            ],
+          ),
         ),
         body: FutureBuilder(
-          future: getGames(),
+          future: getGames(selectedYear),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.done) {
               return ListView.builder(
